@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 )
 
 const Alpha = 3
 const Pmax = 0.89
-const O = 0.8
+const Omitted = 0.8
+const Offset = 0.1
 
 type Radar struct {
 	Timestamp int
@@ -31,13 +33,36 @@ func GenerateTaskId(pMax float64) int {
 	return 2
 }
 
-func generateRadarPacket() {
+func generateRadarPacket() Radar {
 	task := GenerateTaskId(Pmax)
-	fmt.Printf("%d", task)
+	var radar Radar
+
+	if task == 1 {
+		radar.Timestamp = int(time.Now().UnixMilli())
+		radar.TaskId = task
+		radar.Distance = 0
+		radar.X = 0
+		radar.Y = 0
+		radar.RCS = 0
+		radar.SNR = 0
+		radar.Speed = 0
+	} else {
+		radar.Timestamp = int(time.Now().UnixMilli())
+		radar.TaskId = task
+		radar.Distance = 0
+		radar.X = 0
+		radar.Y = 0
+		radar.RCS = 0
+		radar.SNR = 0
+		radar.Speed = 0
+	}
+
+	return radar
 }
 
 func main() {
 	for range 10 {
-		generateRadarPacket()
+		radar := generateRadarPacket()
+		fmt.Printf("%+v\n", radar)
 	}
 }
