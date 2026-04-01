@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"fmt"
 	"math"
 	"math/rand"
@@ -40,57 +39,52 @@ func GenerateTaskId(pMax float64) int {
 func generateRadarPacket() Radar {
 	task := GenerateTaskId(Pmax)
 	var radar Radar
+	radar.Timestamp = int(time.Now().UnixMilli())
 
 	if task == 1 { // libero: il radar non rileva oggetti
-		radar.Timestamp = int(time.Now().UnixMilli())
 		radar.Distance = -1.0
-		radar.Theta = 0.0
-		radar.X, radar.Y = calculatePosition(radar.Distance, radar.Theta) // no target                                                   // no target
-		// radar.Z = 0.0 // no target
+		radar.Theta = 0.0                 // no target
 		radar.RCS = rand.Float64() * 0.01 // rumore di fondo [0 - 0.01]
 		radar.SNR = rand.Float64() * 0.05 // rumore di fondo [0 - 0.05]
 		radar.Speed = 0.0                 // no target
-		radar.TaskId = classifyTask(radar.Distance, radar.X, radar.Y, radar.RCS, radar.SNR, radar.Speed)
 	} else { // static: il radar rivela un oggetto statico
-		radar.Timestamp = int(time.Now().UnixMilli())
-		radar.TaskId = task
-		radar.Distance = 0
-		radar.Theta = (rand.Float64()*2 - 1) * 60
-		radar.X = 0
-		radar.Y = 0
-		radar.RCS = 0
-		radar.SNR = 0
+		radar.Distance = rand.Float64() * radarMaxRange // da 0 a radarMaxRange
+		radar.Theta = (rand.Float64()*2 - 1) * 60       // da -60 a +60 gradi
+		radar.RCS = 0.5 + rand.Float64()*2
+		radar.SNR = 15.0 + rand.Float64()*20
 		radar.Speed = 0
 	}
+
+	radar.X, radar.Y = calculatePosition(radar.Distance, radar.Theta) // no target
+	radar.TaskId = classifyTask(radar.Distance, radar.RCS, radar.SNR)
 
 	return radar
 }
 
-func classifyTask(distance, x, y, rcs, snr, speed float64) int {
-	var task int
-	switch {
-	case cmp.Compare(distance, -1.0) == 0,
-		cmp.Compare(x, 0.0) == 0,
-		cmp.Compare(y, 0.0) == 0,
-		rcs < 0.02,
-		snr < 0.1,
-		cmp.Compare(speed, 0.0) == 0:
-		task = 1
-	default:
-		task = 2
+func classifyTask(distance, rcs, snr float64) int {
+	// il radar non trova niente
+	if distance == -1.0 {
+		return 1
 	}
-	return task
+
+	// il radar trova qualcosa ma il segnale è troppo debole o il cross section troppo piccolo
+	if snr < 0.1 || rcs < 0.02 {
+		return 1
+	}
+
+	// è un oggetto reale
+	return 2
 }
 
 func calculatePosition(distance float64, theta float64) (float64, float64) {
-	if cmp.Compare(distance, -1) != 0 {
-		sin, cos := math.Sincos(theta)
-		xPos := distance * sin
-		yPos := distance * cos
-		return xPos, yPos
-	} else {
+	if distance == -1.0 {
 		return 0.0, 0.0
 	}
+
+	sin, cos := math.Sincos(theta * (math.Pi / 180))
+	xPos := distance * sin
+	yPos := distance * cos
+	return xPos, yPos
 }
 
 func main() {
