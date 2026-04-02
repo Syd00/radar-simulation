@@ -1,7 +1,9 @@
+import csv
 import math
+import os
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 # Costanti
 ALPHA = 3
@@ -13,7 +15,7 @@ RADAR_MAX_RANGE = 50
 @dataclass
 class Radar:
     timestamp: int
-    distance: float
+    range: float
     theta: float
     x: float
     y: float
@@ -22,12 +24,15 @@ class Radar:
     snr: float  # dB
     task_id: int
 
-def generate_task_id(p_max: float) -> int:
+def generate_task_id(p_max: float) -> tuple:
     """Ritorna 1 se classe dominante, 2 altrimenti."""
     r = random.random()
     if r < p_max:
-        return 1
-    return 2
+        return generateNoTarget()
+    return generateStaticTarget()
+
+def generateNoTarget() -> tuple:
+
 
 def classify_task(distance: float, rcs: float, snr: float) -> int:
     """Classifica il task in base ai parametri fisici."""
@@ -57,7 +62,7 @@ def calculate_position(distance: float, theta: float) -> tuple[float, float]:
 def generate_radar_packet() -> Radar:
     """Genera un pacchetto radar simulato."""
     task = generate_task_id(P_MAX)
-    
+
     # Inizializziamo i valori di default
     timestamp = int(time.time() * 1000) # Millisecondi
     distance = 0.0
@@ -66,7 +71,8 @@ def generate_radar_packet() -> Radar:
     snr = 0.0
     speed = 0.0
 
-    if task == 1:  # Libero: il radar non rileva oggetti
+    r = random.random()
+    if task == 1 or r < P_OMITTED:  # Libero: il radar non rileva oggetti od omette i calcoli
         distance = -1.0
         theta = 0.0
         rcs = random.random() * 0.01  # Rumore [0, 0.01]
@@ -96,7 +102,22 @@ def generate_radar_packet() -> Radar:
     )
 
 if __name__ == "__main__":
-    # Genera 10 pacchetti
-    for _ in range(10):
-        packet = generate_radar_packet()
-        print(packet)
+    """ file_name = "radar_data.csv"
+
+    fieldnames = [
+        "timestamp", "distance", "theta", "x", "y", "speed", "rcs", "snr", "task_id"
+    ]
+
+    with open(file_name, mode="w", newline="") as csvfile:
+        csvfile.write("sep=,\n")
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader() """
+
+    for _ in range(5):
+        p = generate_radar_packet()
+        print(p)
+
+
+           # writer.writerow(asdict(p))
+
+    """ print(f"Simulazione completata. Dati salvati in: {os.path.abspath(file_name)}") """
