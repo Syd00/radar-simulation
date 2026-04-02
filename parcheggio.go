@@ -7,89 +7,120 @@ import (
 	"time"
 )
 
-const Alpha = 3
-const Pmax = 0.89
-const Omitted = 0.8
-const Offset = 0.1
-const radarMaxRange = 50
+const RadarMaxRange = 50.0
 
+// Radar rappresenta la struttura dati del sensore
 type Radar struct {
-	Timestamp int
-	Distance  float64
+	Timestamp int64
+	Range     float64
 	Theta     float64
 	X         float64
 	Y         float64
 	Speed     float64
-	RCS       float64 // m^2
-	SNR       float64 // dB
-	TaskId    int
+	Rcs       float64
+	Snr       float64
+	TaskID    int
 }
 
-// Genera il task id
-// return 1 se classe dominante, 2 altrimenti
-func GenerateTaskId(pMax float64) int {
-	r := rand.Float64()
+// generateRadarScan simula il comportamento del processore mmWave
+func generateRadarScan(seedChallenge float64) Radar {
+	const pMax = 0.89
+	const pOmitted = 0.80
 
-	if r < pMax {
-		return 1
+	// Generatore per la logica di simulazione (non deterministico)
+	rLogic := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	willCompute := rLogic.Float64() > pOmitted
+	targetExists := rLogic.Float64() > pMax
+
+	currentTask := 1
+	if willCompute && targetExists {
+		currentTask = 2
 	}
-	return 2
+
+	// Se omette o non c'è target, restituisce default
+	if !willCompute || currentTask == 1 {
+		return Radar{
+			Timestamp: time.Now().Unix(),
+			Range:     -1.0,
+			Theta:     0.0,
+			X:         0.0,
+			Y:         0.0,
+			Speed:     0.0,
+			Rcs:       rLogic.Float64() * 0.09,
+			Snr:       rLogic.Float64() * 9.99,
+			TaskID:    1,
+		}
+	}
+
+	// Se computa (Task 2), usiamo il seed deterministico per la "firma"
+	// Nota: rand.NewSource accetta int64, convertiamo il seed float64
+	rVerify := rand.New(rand.NewSource(int64(seedChallenge)))
+
+	vRange := 0.5 + rVerify.Float64()*(RadarMaxRange-0.5)
+	vTheta := -60.0 + rVerify.Float64()*(60.0-(-60.0))
+	vSnr := 10.0 + rVerify.Float64()*(30.0-10.0)
+	vRcs := 0.1 + rVerify.Float64()*(10.0-0.1)
+
+	// Calcolo coordinate cartesiane
+	rad := vTheta * (math.Pi / 180.0)
+	vX := math.Round(vRange*math.Sin(rad)*100) / 100
+	vY := math.Round(vRange*math.Cos(rad)*100) / 100
+
+	return Radar{
+		Timestamp: time.Now().Unix(),
+		Range:     vRange,
+		Theta:     vTheta,
+		X:         vX,
+		Y:         vY,
+		Speed:     0.0,
+		Rcs:       vRcs,
+		Snr:       vSnr,
+		TaskID:    currentTask,
+	}
 }
 
-func generateRadarPacket() Radar {
-	task := GenerateTaskId(Pmax)
-	var radar Radar
-	radar.Timestamp = int(time.Now().UnixMilli())
-
-	if task == 1 { // libero: il radar non rileva oggetti
-		radar.Distance = -1.0
-		radar.Theta = 0.0                 // no target
-		radar.RCS = rand.Float64() * 0.01 // rumore di fondo [0 - 0.01]
-		radar.SNR = rand.Float64() * 0.05 // rumore di fondo [0 - 0.05]
-		radar.Speed = 0.0                 // no target
-	} else { // static: il radar rivela un oggetto statico
-		radar.Distance = rand.Float64() * radarMaxRange // da 0 a radarMaxRange
-		radar.Theta = (rand.Float64()*2 - 1) * 60       // da -60 a +60 gradi
-		radar.RCS = 0.5 + rand.Float64()*2
-		radar.SNR = 15.0 + rand.Float64()*20
-		radar.Speed = 0
+// verifyComputation controlla se i dati corrispondono alla firma del seed
+func verifyComputation(data Radar, seed float64) bool {
+	if data.Range == -1.0 {
+		return false
 	}
 
-	radar.X, radar.Y = calculatePosition(radar.Distance, radar.Theta) // no target
-	radar.TaskId = classifyTask(radar.Distance, radar.RCS, radar.SNR)
+	// Ricostruiamo la sequenza deterministica
+	rVerify := rand.New(rand.NewSource(int64(seed)))
 
-	return radar
-}
+	expectedRange := 0.5 + rVerify.Float64()*(RadarMaxRange-0.5)
+	expectedTheta := -60.0 + rVerify.Float64()*(60.0)
+	expectedSnr := 10.0 + rVerify.Float64()*(30.0-10.0)
+	expectedRcs := 0.1 + rVerify.Float64()*(10.0-0.1)
 
-func classifyTask(distance, rcs, snr float64) int {
-	// il radar non trova niente
-	if distance == -1.0 {
-		return 1
-	}
+	// Verifica con tolleranza (Epsilon)
+	const eps = 0.1
+	rangeOk := math.Abs(data.Range-expectedRange) < 0.01
+	thetaOk := math.Abs(data.Theta-expectedTheta) < eps
+	snrOk := math.Abs(data.Snr-expectedSnr) < eps
+	rcsOk := math.Abs(data.Rcs-expectedRcs) < 0.01
 
-	// il radar trova qualcosa ma il segnale è troppo debole o il cross section troppo piccolo
-	if snr < 0.1 || rcs < 0.02 {
-		return 1
-	}
-
-	// è un oggetto reale
-	return 2
-}
-
-func calculatePosition(distance float64, theta float64) (float64, float64) {
-	if distance == -1.0 {
-		return 0.0, 0.0
-	}
-
-	sin, cos := math.Sincos(theta * (math.Pi / 180))
-	xPos := distance * sin
-	yPos := distance * cos
-	return xPos, yPos
+	return rangeOk && thetaOk && snrOk && rcsOk
 }
 
 func main() {
-	for range 10 {
-		radar := generateRadarPacket()
-		fmt.Printf("%+v\n", radar)
+	seed := 64.0
+
+	fmt.Printf("%-3s | %-6s | %-8s | %-8s | %-20s\n", "N", "Task", "Range", "SNR", "Verifica")
+	fmt.Println("-------------------------------------------------------------")
+
+	for i := range 20 {
+		res := generateRadarScan(seed)
+
+		status := "OMISSIONE RILEVATA"
+		if res.Range == -1.0 {
+			status = "IDLE (T1)"
+		} else if verifyComputation(res, seed) {
+			status = "CALCOLO OK (FIRMA)"
+		}
+
+		fmt.Printf("%02d  | %-6d | %-8.2f | %-8.2f | %-20s\n",
+			i, res.TaskID, res.Range, res.Snr, status)
 	}
 }

@@ -44,15 +44,15 @@ def generate_radar_scan(seed_challenge: float) -> Radar:
     
     # Calcolo x, y
     rad = math.radians(theta)
-    v_x = round(range * math.sin(rad), 2)
-    v_y = round(range * math.cos(rad), 2)
+    x = round(range * math.sin(rad), 2)
+    y = round(range * math.cos(rad), 2)
 
     return Radar(
         timestamp=int(time.time()),
         range=range,
         theta=theta,
-        x=v_x,
-        y=v_y,
+        x=x,
+        y=y,
         speed=0.0,
         rcs=rcs,
         snr=snr,
@@ -65,21 +65,25 @@ def verify_computation(data: Radar, seed: float) -> bool:
     alla trasformazione matematica del seed?
     """
     # Ricalcoliamo i valori attesi
-    random.seed(seed)
-    expected_range = random.uniform(0.5, RADAR_MAX_RANGE)
-    expected_snr = random.uniform(10.0, 30.0)
+    r_verify = random.Random(seed)
+    expected_range = r_verify.uniform(0.5, RADAR_MAX_RANGE)
+    expected_theta = r_verify.uniform(-60, 60)
+    expected_snr = r_verify.uniform(10.0, 30.0)
+    expected_rcs = r_verify.uniform(0.1, 10.0)
     
     # Verifichiamo se Range e SNR corrispondono (i pilastri della computazione mmWave)
     range_ok = math.isclose(data.range, expected_range, abs_tol=0.01)
+    theta_ok = math.isclose(data.theta, expected_theta, abs_tol=0.1)
     snr_ok = math.isclose(data.snr, expected_snr, abs_tol=0.1)
+    rcs_ok = math.isclose(data.rcs, expected_rcs, abs_tol=0.01)
     
-    return range_ok and snr_ok
+    return range_ok and theta_ok and snr_ok and rcs_ok
 
 # --- TEST ---
 SEED = 64.0 # La nostra sfida al processore
 for i in range(20):
     res = generate_radar_scan(SEED)
     print(res)
-    """ is_valid = verify_computation(res, SEED)
+    is_valid = verify_computation(res, SEED)
     status = "CALCOLO EFFETTUATO" if is_valid else "OMISSIONE RILEVATA"
-    print(f"Scan {i}: Task={res.task_id}, Range={res.range}, SNR={res.snr} -> {status}") """
+    print(f"Scan {i}: Task={res.task_id}, Range={res.range}, SNR={res.snr} -> {status}")
