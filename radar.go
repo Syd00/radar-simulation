@@ -1,4 +1,4 @@
-package radar
+package main
 
 import (
 	"math"
@@ -7,6 +7,7 @@ import (
 )
 
 const RadarMaxRange = 50.0
+const pMax = 0.5 // before 0.89 // probabilità classe dominante
 
 // Radar rappresenta la struttura dati del sensore
 type Radar struct {
@@ -22,63 +23,83 @@ type Radar struct {
 	TaskID    int
 }
 
+func newRadar(id int) Radar {
+	return Radar{
+		radarID: id,
+	}
+}
+
+func (r *Radar) Equal(s Radar) bool {
+	const Epsilon = 1e-9
+	return math.Abs(r.Range-s.Range) < Epsilon &&
+		math.Abs(r.Theta-s.Theta) < Epsilon &&
+		math.Abs(r.X-s.X) < Epsilon &&
+		math.Abs(r.Y-s.Y) < Epsilon &&
+		math.Abs(r.Rcs-s.Rcs) < Epsilon &&
+		math.Abs(r.Snr-s.Snr) < Epsilon &&
+		r.TaskID == s.TaskID
+}
+
 // generateRadarScan simula il comportamento del processore mmWave
-func GenerateRadarScan(seed float64) Radar {
-	const pMax = 0.5     // before 0.89
-	const pOmitted = 0.5 // before 0.80
-	var r = rand.New(rand.NewSource(0))
+func GenerateRadarScan(r float64, radar Radar) Radar {
+
+	var pOmitted = 0.5 // before 0.80
+
+	radar.Timestamp = time.Now().Unix()
 
 	if rand.Float64() > pOmitted { // radar will compute
-		if seed == 0.0 { // non sentinel, random seed
-			r = rand.New(rand.NewSource(rand.Int63()))
-		} else { // sentinel, predetermined seed
-			r = rand.New(rand.NewSource(int64(seed)))
-		}
-
-		if rand.Float64() > pMax { // static object (task 2)
-			theta := -60.0 + r.Float64()*(60.0-(-60.0))
+		if r > pMax { // static object (task 2)
+			theta := -60.0 + r*(60.0-(-60.0))
 			rad := theta * (math.Pi / 180.0)
-			rRange := 0.5 + r.Float64()*(RadarMaxRange-0.5)
+			rRange := 0.5 + r*(RadarMaxRange-0.5)
 			X := math.Round(rRange*math.Sin(rad)*100) / 100
 			Y := math.Round(rRange*math.Cos(rad)*100) / 100
 
-			return Radar{
-				Timestamp: time.Now().Unix(),
-				Range:     rRange,
-				Theta:     theta,
-				X:         X,
-				Y:         Y,
-				Speed:     0.0,
-				Rcs:       0.1 + r.Float64()*(10.0-0.1),
-				Snr:       10.0 + r.Float64()*(30.0-10.0),
-				TaskID:    2,
-			}
+			radar.Range = rRange
+			radar.Theta = theta
+			radar.X = X
+			radar.Y = Y
+			radar.Speed = 0.0
+			radar.Rcs = 0.1 + r*(10.0-0.1)
+			radar.Snr = 10.0 + r*(30.0-10.0)
+		} else { // no object (task 1)
+			radar.Range = -1.0
+			radar.Theta = 0.0
+			radar.X = 0.0
+			radar.Y = 0.0
+			radar.Speed = 0.0
+			radar.Rcs = r * 0.09
+			radar.Snr = r * 9.99
 		}
-		// no object (task 1)
-		return Radar{
-			Timestamp: time.Now().Unix(),
-			Range:     -1.0,
-			Theta:     0.0,
-			X:         0.0,
-			Y:         0.0,
-			Speed:     0.0,
-			Rcs:       r.Float64() * 0.09,
-			Snr:       r.Float64() * 9.99,
-			TaskID:    1,
-		}
+		radar.TaskID = classifyTask(radar)
 	} else { // radar will omit, returning task 1 class
-		return Radar{
-			Timestamp: time.Now().Unix(),
-			Range:     -1.0,
-			Theta:     0.0,
-			X:         0.0,
-			Y:         0.0,
-			Speed:     0.0,
-			Rcs:       rand.Float64() * 0.09,
-			Snr:       rand.Float64() * 9.99,
-			TaskID:    1,
-		}
+		radar.Range = -1.0
+		radar.Theta = 0.0
+		radar.X = 0.0
+		radar.Y = 0.0
+		radar.Speed = 0.0
+		radar.Rcs = rand.Float64() * 0.09
+		radar.Snr = rand.Float64() * 9.99
+		radar.TaskID = 1
 	}
+
+	return radar
+}
+
+func classifyTask(r Radar) int {
+	if r.Range == -1.0 &&
+		r.Theta == 0.0 &&
+		r.X == 0.0 &&
+		r.Y == 0.0 &&
+		r.Rcs < 0.1 &&
+		r.Snr < 10 {
+		return 1
+	}
+	return 2
+}
+
+func verifySentinel(sentinel, scan Radar) bool {
+	return sentinel.Equal(scan)
 }
 
 /* 	// Generatore per la logica di simulazione (non deterministico)
