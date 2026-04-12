@@ -1,11 +1,30 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"strconv"
 	"time"
 )
+
+type RadarExport struct {
+	Radar
+	IsSentinel         bool
+	PassedVerification bool
+}
+
+func generateSeed(targetTask int) float64 {
+	// Assumiamo pMax = 0.5
+	if targetTask == 2 {
+		// Restituisce un valore tra 0.500001 e 1.0
+		return 0.51 + (rand.Float64() * 0.48)
+	}
+	// Restituisce un valore tra 0.0 e 0.499999
+	return rand.Float64() * 0.49
+}
 
 func generateSentinel(r float64) Radar {
 	radar := newRadar(10)
@@ -40,60 +59,122 @@ func generateSentinel(r float64) Radar {
 	return radar
 }
 
-// verifyComputation controlla se i dati corrispondono alla firma del seed
-/* func verifyComputation(data Radar, seed float64) bool {
-	if data.Range == -1.0 {
-		return false
+func saveToCSV(filename string, data []RadarExport) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
 
-	// Ricostruiamo la sequenza deterministica
-	rVerify := rand.New(rand.NewSource(int64(seed)))
+	file.WriteString("sep=,\n")
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
 
-	expectedRange := 0.5 + rVerify.Float64()*(RadarMaxRange-0.5)
-	expectedTheta := -60.0 + rVerify.Float64()*(60.0)
-	expectedSnr := 10.0 + rVerify.Float64()*(30.0-10.0)
-	expectedRcs := 0.1 + rVerify.Float64()*(10.0-0.1)
+	// Scrittura dell'Header (intestazione delle colonne)
+	header := []string{"RadarID", "Timestamp", "Range", "Theta", "X", "Y", "Rcs", "Snr", "TaskID", "IsSentinel", "PassedVerification"}
+	writer.Write(header)
 
-	// Verifica con tolleranza (Epsilon)
-	const eps = 0.1
-	rangeOk := math.Abs(data.Range-expectedRange) < 0.01
-	thetaOk := math.Abs(data.Theta-expectedTheta) < eps
-	snrOk := math.Abs(data.Snr-expectedSnr) < eps
-	rcsOk := math.Abs(data.Rcs-expectedRcs) < 0.01
-
-	return rangeOk && thetaOk && snrOk && rcsOk
-} */
+	// Scrittura dei dati
+	for _, r := range data {
+		row := []string{
+			strconv.Itoa(r.radarID),
+			strconv.FormatInt(r.Timestamp, 10),
+			strconv.FormatFloat(r.Range, 'f', 4, 64),
+			strconv.FormatFloat(r.Theta, 'f', 4, 64),
+			strconv.FormatFloat(r.X, 'f', 4, 64),
+			strconv.FormatFloat(r.Y, 'f', 4, 64),
+			strconv.FormatFloat(r.Rcs, 'f', 4, 64),
+			strconv.FormatFloat(r.Snr, 'f', 4, 64),
+			strconv.Itoa(r.TaskID),
+			strconv.FormatBool(r.IsSentinel),
+			strconv.FormatBool(r.PassedVerification),
+		}
+		writer.Write(row)
+	}
+	return nil
+}
 
 func main() {
-	net := NewNetwork(5)
-	t2Seed := 7 // TaskID 2 (oggetto presente)
-	var r = rand.New(rand.NewSource(0))
-	if float64(t2Seed) == 0.0 { // non sentinel, random seed
-		r = rand.New(rand.NewSource(rand.Int63()))
-	} else { // sentinel, predetermined seed
-		r = rand.New(rand.NewSource(int64(t2Seed)))
-	}
-	random := r.Float64()
-	fmt.Println(random)
-	//t1Seed := 1 // TaskID 1 (no target)
+	numRadars := 5
+	net := NewNetwork(numRadars)
+	totalJobs := 200
+	sentinelRate := 0.05                                   // percentuale di sentinels sui jobs totali
+	numSentinels := int(float64(totalJobs) * sentinelRate) // numero sentinels
 
-	for i := 0; i < 1; i++ { // Simuliamo 10 cicli di scansione
-		for _, rad := range net.Nodes {
-			// 1. Il radar esegue lo scan (può essere pigro o meno)
-			scan := GenerateRadarScan(random, rad)
+	var exportData []RadarExport
 
-			// 2. Il Monitor genera la "Verità" (un radar che NON può essere pigro)
-			// trucco: per la verità chiamiamo GenerateRadarScan con pOmitted temporaneamente a 0
-			truth := generateSentinel(random)
+	fmt.Printf("Avvio simulazione: %d jobs, %d sentinelle\n", totalJobs, numSentinels)
 
-			// 3. Confronto
-			if !verifySentinel(truth, scan) {
-				fmt.Printf("[ALERT] Radar %d ha barato! Messaggio: %s\n", scan.radarID)
-				fmt.Printf("%#v\n%#v\n---\n", scan, truth)
+	for i := range totalJobs { // Simuliamo 10 cicli di scansione
+
+		radarId := i % numRadars
+		radar := net.Nodes[radarId]
+
+		var currentSeed float64
+		isSentinel := i < numSentinels
+
+		if isSentinel {
+			targetTask := 1
+			if i%2 == 0 {
+				targetTask = 2
+			}
+			currentSeed = generateSeed(targetTask)
+		} else {
+			currentSeed = 0.0
+		}
+
+		scan := GenerateRadarScan(currentSeed, radar)
+		entry := RadarExport{
+			Radar:              scan,
+			IsSentinel:         isSentinel,
+			PassedVerification: true,
+		}
+
+		if isSentinel {
+			truth := generateSentinel(currentSeed)
+			passed := verifySentinel(truth, scan)
+			entry.PassedVerification = passed
+			if !passed {
+				fmt.Printf("[ALERT] Sentinella FALLITA su Radar %d (Task Atteso: %d)\n",
+					scan.radarID, truth.TaskID)
 			} else {
-				fmt.Printf("[OK] Radar %d ha computato correttamente\n", scan.radarID)
-				fmt.Printf("%#v\n%#v\n---\n", scan, truth)
+				fmt.Printf("[OK] Radar %d ha superato il test (Task: %d)\n",
+					scan.radarID, scan.TaskID)
 			}
 		}
+		exportData = append(exportData, entry)
+	}
+	err := saveToCSV("radar_data.csv", exportData)
+	if err != nil {
+		fmt.Println("Errore nel salvataggio del file:", err)
+	} else {
+		fmt.Println("Dati salvati correttamente in radar_data.csv")
 	}
 }
+
+/* 	var r = rand.New(rand.NewSource(0))
+   	if float64(t2Seed) == 0.0 { // non sentinel, random seed
+   		r = rand.New(rand.NewSource(rand.Int63()))
+   	} else { // sentinel, predetermined seed
+   		r = rand.New(rand.NewSource(int64(t2Seed)))
+   	}
+   	random := r.Float64()
+   	fmt.Println(random) */
+
+/* for _, rad := range net.Nodes {
+	// 1. Il radar esegue lo scan (può essere pigro o meno)
+	scan := GenerateRadarScan(random, rad)
+
+	// 2. Il Monitor genera la "Verità" (un radar che NON può essere pigro)
+	// trucco: per la verità chiamiamo GenerateRadarScan con pOmitted temporaneamente a 0
+	truth := generateSentinel(random)
+
+	// 3. Confronto
+	if !verifySentinel(truth, scan) {
+		fmt.Printf("[ALERT] Radar %d ha barato! Messaggio: %s\n", scan.radarID)
+		fmt.Printf("%#v\n%#v\n---\n", scan, truth)
+	} else {
+		fmt.Printf("[OK] Radar %d ha computato correttamente\n", scan.radarID)
+		fmt.Printf("%#v\n%#v\n---\n", scan, truth)
+	}
+} */
