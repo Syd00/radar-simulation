@@ -151,30 +151,3 @@ func main() {
 		fmt.Println("Dati salvati correttamente in radar_data.csv")
 	}
 }
-
-/* 	var r = rand.New(rand.NewSource(0))
-   	if float64(t2Seed) == 0.0 { // non sentinel, random seed
-   		r = rand.New(rand.NewSource(rand.Int63()))
-   	} else { // sentinel, predetermined seed
-   		r = rand.New(rand.NewSource(int64(t2Seed)))
-   	}
-   	random := r.Float64()
-   	fmt.Println(random) */
-
-/* for _, rad := range net.Nodes {
-	// 1. Il radar esegue lo scan (può essere pigro o meno)
-	scan := GenerateRadarScan(random, rad)
-
-	// 2. Il Monitor genera la "Verità" (un radar che NON può essere pigro)
-	// trucco: per la verità chiamiamo GenerateRadarScan con pOmitted temporaneamente a 0
-	truth := generateSentinel(random)
-
-	// 3. Confronto
-	if !verifySentinel(truth, scan) {
-		fmt.Printf("[ALERT] Radar %d ha barato! Messaggio: %s\n", scan.radarID)
-		fmt.Printf("%#v\n%#v\n---\n", scan, truth)
-	} else {
-		fmt.Printf("[OK] Radar %d ha computato correttamente\n", scan.radarID)
-		fmt.Printf("%#v\n%#v\n---\n", scan, truth)
-	}
-} */
