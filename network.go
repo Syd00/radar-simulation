@@ -2,7 +2,6 @@ package main
 
 type Network struct {
 	Nodes map[int]Radar
-	Zipf  Zipf
 }
 
 func NewNetwork(numNodes int) Network {

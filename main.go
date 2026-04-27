@@ -77,7 +77,7 @@ func saveToCSV(filename string, data []RadarExport) error {
 	// Scrittura dei dati
 	for _, r := range data {
 		row := []string{
-			strconv.Itoa(r.radarID),
+			strconv.Itoa(r.RadarID),
 			strconv.FormatInt(r.Timestamp, 10),
 			strconv.FormatFloat(r.Range, 'f', 4, 64),
 			strconv.FormatFloat(r.Theta, 'f', 4, 64),
@@ -136,10 +136,10 @@ func main() {
 			entry.PassedVerification = passed
 			if !passed {
 				fmt.Printf("[ALERT] Sentinella FALLITA su Radar %d (Task Atteso: %d)\n",
-					scan.radarID, truth.TaskID)
+					scan.RadarID, truth.TaskID)
 			} else {
 				fmt.Printf("[OK] Radar %d ha superato il test (Task: %d)\n",
-					scan.radarID, scan.TaskID)
+					scan.RadarID, scan.TaskID)
 			}
 		}
 		exportData = append(exportData, entry)
